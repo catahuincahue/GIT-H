@@ -1,0 +1,76 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity top_level is
+    Port (
+        clk    : in  STD_LOGIC;  -- reloj basys 100MHz
+        pin_rx : in  STD_LOGIC;  -- RX desde la ESP32 (PMOD JA1)
+        sw_in  : in  STD_LOGIC;  -- switch (SW0)
+        an     : out STD_LOGIC_VECTOR(3 downto 0); -- anodos
+        seg    : out STD_LOGIC_VECTOR(6 downto 0); -- 7 segmentos
+        dp     : out STD_LOGIC   -- punto decimal
+    );
+end top_level;
+
+architecture Structural of top_level is
+    -- divisor de reloj
+    component divisor_reloj is
+        Port ( clk_in : in STD_LOGIC; clk_disp : out STD_LOGIC );
+    end component;
+
+    -- receptor UART y decodificador
+    component uart_rx_decoder is
+        Port ( clk : in STD_LOGIC; rx_pin : in STD_LOGIC; 
+               bcd_adc : out STD_LOGIC_VECTOR(15 downto 0); 
+               bcd_in : out STD_LOGIC_VECTOR(15 downto 0) );
+    end component;
+
+    -- controlador del display
+    component display_controller is
+        Port ( clk_disp : in STD_LOGIC; sw_in : in STD_LOGIC;
+               bcd_adc : in STD_LOGIC_VECTOR(15 downto 0);
+               bcd_in : in STD_LOGIC_VECTOR(15 downto 0);
+               anodes : out STD_LOGIC_VECTOR(3 downto 0);
+               cathodes : out STD_LOGIC_VECTOR(7 downto 0) );
+    end component;
+
+    -- cables
+    signal wire_clk_disp : STD_LOGIC;
+    signal wire_bcd_adc  : STD_LOGIC_VECTOR(15 downto 0);
+    signal wire_bcd_in   : STD_LOGIC_VECTOR(15 downto 0);
+    signal wire_cathodes : STD_LOGIC_VECTOR(7 downto 0);
+
+-- conexiones
+begin
+    -- divisor de reloj
+    Inst_Divisor: divisor_reloj
+        port map (
+            clk_in   => clk,
+            clk_disp => wire_clk_disp
+        );
+
+    -- UART RX
+    Inst_UART: uart_rx_decoder
+        port map (
+            clk      => clk,
+            rx_pin   => pin_rx,
+            bcd_adc  => wire_bcd_adc,
+            bcd_in   => wire_bcd_in
+        );
+
+    -- controlador display
+    Inst_Display: display_controller
+        port map (
+            clk_disp => wire_clk_disp,
+            sw_in    => sw_in,
+            bcd_adc  => wire_bcd_adc,
+            bcd_in   => wire_bcd_in,
+            anodes   => an,
+            cathodes => wire_cathodes
+        );
+
+    -- separacion del bus de catodos para el .xdc
+    dp  <= wire_cathodes(7);             -- bit 7 es el punto decimal
+    seg <= wire_cathodes(6 downto 0);    -- bits 6 al 0 son los segmentos A-G
+
+end Structural;

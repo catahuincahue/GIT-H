@@ -1,0 +1,27 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity divisor_reloj is
+    Port (
+        clk_in   : in  STD_LOGIC; -- clk de la basys (100 MHz)
+        clk_disp : out STD_LOGIC  -- ~380 Hz para refrescar el display
+    );
+end divisor_reloj;
+
+architecture Behavioral of divisor_reloj is
+    -- contador de 18 bits (100M / 2^18 = ~381 Hz)
+    signal counter : unsigned(17 downto 0) := (others => '0');
+    -- 18 flip flops para memoria de 18 bits
+begin
+
+    process(clk_in) -- todo se evalua cuando el reloj maestro cambie
+    begin
+        if rising_edge(clk_in) then -- flanco de subida
+            counter <= counter + 1; 
+        end if;
+    end process;
+    
+    -- el bit más significativo servirá como reloj de refresco
+    clk_disp <= counter(17); -- unimos el bit 18 a la salida
+end Behavioral;

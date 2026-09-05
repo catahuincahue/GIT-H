@@ -1,0 +1,134 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity uart_rx_decoder is
+    Port (
+        clk      : in  STD_LOGIC; -- 100 MHz
+        rx_pin   : in  STD_LOGIC; -- pin RX
+        bcd_adc  : out STD_LOGIC_VECTOR(15 downto 0); -- bus datos adc
+        bcd_in   : out STD_LOGIC_VECTOR(15 downto 0)  -- bus datos in
+    );
+end uart_rx_decoder;
+
+
+-- definir las señales internas guardadas en la memoria
+architecture Behavioral of uart_rx_decoder is
+    constant CLKS_PER_BIT : integer := 10416; -- defino los ciclos de reloj (100M/9600)
+    
+    -- señales máquina de estados UART
+    type uart_state_t is (IDLE, START, DATA, STOP); -- estados del RX UART
+    signal uart_state : uart_state_t := IDLE;
+    signal rx_clk_cnt : integer range 0 to CLKS_PER_BIT-1 := 0; -- contador de tiempo
+    signal rx_bit_cnt : integer range 0 to 7 := 0;  -- contador de bits d
+    signal rx_byte    : STD_LOGIC_VECTOR(7 downto 0) := (others => '0');-- registro los 8 bits
+    signal rx_dv      : STD_LOGIC := '0'; -- bandera que pulsa 1 cuando este listo el byte
+
+    -- señales máquina de estados de trama (50 bits)
+    -- => se definen los pasos para enrutar la trama
+    type frame_state_t is (WAIT_SYNC, GET_ADC_H, GET_ADC_L, GET_IN_H, GET_IN_L);
+    signal frame_state : frame_state_t := WAIT_SYNC; 
+    
+    -- registros internos (de 16 bits) para evitar cambios a mitad de trama
+    signal reg_adc : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
+    signal reg_in  : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
+    
+
+-- logica de estados de RX UART y decodificador
+begin
+    -- salidas
+    -- en estas 2 sñls (16b) vamos guardando 2 bytes en cada una
+    bcd_adc <= reg_adc;
+    bcd_in  <= reg_in;
+
+
+-- RX UART
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            rx_dv <= '0';
+            case uart_state is
+
+                when IDLE => 
+                -- sistema en reposo reseteando contadores
+                -- START <=> detecta que rx_pin cae a 0 (start bit)
+                    rx_clk_cnt <= 0;
+                    rx_bit_cnt <= 0;
+                    if rx_pin = '0' then -- Detecta Start Bit
+                        uart_state <= START;
+                    end if;
+                    
+                when START =>
+                -- cuenta hasta la mitad del pulso ((CLKS_PER_BIT-1)/2)
+                -- DATA <=> rx_pin = 0 (para descarta ruido)
+                    if rx_clk_cnt = (CLKS_PER_BIT-1)/2 then -- muestreo al medio del bit
+                        if rx_pin = '0' then
+                            rx_clk_cnt <= 0;
+                            uart_state <= DATA;
+                        else
+                            uart_state <= IDLE; -- rx_pin = 1 => UART en reposo => mismo estado IDLE
+                        end if;
+                    else
+                        rx_clk_cnt <= rx_clk_cnt + 1;
+                    end if;
+                    
+                when DATA =>
+                -- espera el ciclo completo (CLKS_PER_BIT-1) => guarda el valor del pin en la posición actual de rx_byte
+                -- repite esto sumando rx_bit_cnt hasta capturar los 8 bits
+                    if rx_clk_cnt = CLKS_PER_BIT-1 then
+                        rx_clk_cnt <= 0;
+                        rx_byte(rx_bit_cnt) <= rx_pin;
+                        if rx_bit_cnt < 7 then
+                            rx_bit_cnt <= rx_bit_cnt + 1;
+                        else
+                            rx_bit_cnt <= 0;
+                            uart_state <= STOP;
+                        end if;
+                    else
+                        rx_clk_cnt <= rx_clk_cnt + 1;
+                    end if;
+                    
+                when STOP =>
+                -- espera el tiempo de stop bit
+                -- => enciende rx_dv <= 1 (anuncia al resto del sistema que tiene un byte valido)
+                    if rx_clk_cnt = CLKS_PER_BIT-1 then
+                        rx_dv <= '1'; -- byte recibido correctamente
+                        uart_state <= IDLE;
+                    else
+                        rx_clk_cnt <= rx_clk_cnt + 1;
+                    end if;
+            end case;
+        end if;
+    end process;
+
+
+-- decodificador de trama: ya se tiene un byte valido dado por lo anterior
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rx_dv = '1' then -- sinc reloj
+                case frame_state is
+                    when WAIT_SYNC =>
+                    -- espera el 0xAA => vienen los 4 bytes de datos
+                        if rx_byte = x"AA" then -- byte de sincronización
+                            frame_state <= GET_ADC_H;
+                        end if;
+                    when GET_ADC_H =>
+                    -- va guardando cada nuevo byte en su mitad correspondiente del registro de 16 bits (bits del 15 al 8, o del 7 al 0)
+                    -- al terminar vuelve a esperar la sinc
+                        reg_adc(15 downto 8) <= rx_byte; -- se guarda un byte en bits 15 a 8 de reg_adc
+                        frame_state <= GET_ADC_L;
+                    when GET_ADC_L =>
+                        reg_adc(7 downto 0) <= rx_byte; -- se guarda un byte en bits 7 a 0 de reg_adc
+                        frame_state <= GET_IN_H;
+                    when GET_IN_H =>
+                        reg_in(15 downto 8) <= rx_byte; -- se guarda un byte en bits 15 a 8 de reg_in
+                        frame_state <= GET_IN_L;
+                    when GET_IN_L =>
+                        reg_in(7 downto 0) <= rx_byte; -- se guarda un byte en bits 15 a 8 de reg_in
+                        frame_state <= WAIT_SYNC;
+                end case;
+            end if;
+        end if;
+    end process;
+end Behavioral;

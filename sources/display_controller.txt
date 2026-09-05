@@ -1,0 +1,84 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity display_controller is
+    Port (
+        clk_disp : in  STD_LOGIC; -- Reloj lento de refresco (~380 Hz)
+        sw_in    : in  STD_LOGIC; -- Switch selector
+        bcd_adc  : in  STD_LOGIC_VECTOR(15 downto 0);
+        bcd_in   : in  STD_LOGIC_VECTOR(15 downto 0);
+        anodes   : out STD_LOGIC_VECTOR(3 downto 0);
+        cathodes : out STD_LOGIC_VECTOR(7 downto 0) -- 7 segmentos + 1 DP
+    );
+end display_controller;
+
+architecture Behavioral of display_controller is
+    signal current_data  : STD_LOGIC_VECTOR(15 downto 0);
+    signal active_digit  : unsigned(1 downto 0) := "00";
+    signal bcd_to_decode : STD_LOGIC_VECTOR(3 downto 0);
+    signal seg           : STD_LOGIC_VECTOR(6 downto 0);
+    signal dp            : STD_LOGIC;
+begin
+
+    -- selector de bus 
+    -- sw_in = 1 => bcd_in
+    -- sw_in = 0 => bcd_adc
+    current_data <= bcd_in when sw_in = '1' else bcd_adc;
+    
+    -- conectar segmentos (6 a 0) y punto decimal (bit 7)
+    cathodes <= dp & seg;
+
+-- reloj rotativo de 00->111=00
+    process(clk_disp)
+    begin
+        if rising_edge(clk_disp) then
+            active_digit <= active_digit + 1;
+        end if;
+    end process;
+
+-- Demultiplexor 
+    process(active_digit, current_data)
+    begin
+        case active_digit is
+            when "00" => 
+                anodes <= "0111"; -- encender digito 3
+                bcd_to_decode <= current_data(15 downto 12);
+                dp <= '1';        -- DP apagado
+            when "01" => 
+                anodes <= "1011"; -- encender digito 2
+                bcd_to_decode <= current_data(11 downto 8);
+                dp <= '0';        -- DP encendido
+            when "10" => 
+                anodes <= "1101"; -- encender digito 1
+                bcd_to_decode <= current_data(7 downto 4);
+                dp <= '1';        -- DP apagado
+            when "11" => 
+                anodes <= "1110"; -- encender digito 0
+                bcd_to_decode <= current_data(3 downto 0);
+                dp <= '1';        -- DP apagado
+            when others =>
+                anodes <= "1111";
+                bcd_to_decode <= "0000";
+                dp <= '1';
+        end case;
+    end process;
+
+-- decodificador BCD a 7 Segmentos
+    process(bcd_to_decode)
+    begin
+        case bcd_to_decode is
+            when "0000" => seg <= "1000000"; -- 0
+            when "0001" => seg <= "1111001"; -- 1
+            when "0010" => seg <= "0100100"; -- 2
+            when "0011" => seg <= "0110000"; -- 3
+            when "0100" => seg <= "0011001"; -- 4
+            when "0101" => seg <= "0010010"; -- 5
+            when "0110" => seg <= "0000010"; -- 6
+            when "0111" => seg <= "1111000"; -- 7
+            when "1000" => seg <= "0000000"; -- 8
+            when "1001" => seg <= "0010000"; -- 9
+            when others => seg <= "1111111"; -- apagado
+        end case;
+    end process;
+end Behavioral;
