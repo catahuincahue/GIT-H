@@ -5,7 +5,7 @@ use IEEE.NUMERIC_STD.ALL;
 entity display_controller is
     Port (
         clk_disp : in  STD_LOGIC; -- Reloj lento de refresco (~380 Hz)
-        sw_in    : in  STD_LOGIC; -- Switch selector
+        sw_in    : in  STD_LOGIC; -- Switch selector - modificar en Master
         bcd_adc  : in  STD_LOGIC_VECTOR(15 downto 0);
         bcd_in   : in  STD_LOGIC_VECTOR(15 downto 0);
         anodes   : out STD_LOGIC_VECTOR(3 downto 0);

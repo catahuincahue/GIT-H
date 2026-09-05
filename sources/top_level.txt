@@ -4,8 +4,8 @@ use IEEE.STD_LOGIC_1164.ALL;
 entity top_level is
     Port (
         clk    : in  STD_LOGIC;  -- reloj basys 100MHz
-        pin_rx : in  STD_LOGIC;  -- RX desde la ESP32 (PMOD JA1)
-        sw_in  : in  STD_LOGIC;  -- switch (SW0)
+        pin_rx : in  STD_LOGIC;  -- modificar en Master - RX desde la ESP32 (PMOD JA1)
+        sw_in  : in  STD_LOGIC;  -- modificar en Master - switch (SW0)
         an     : out STD_LOGIC_VECTOR(3 downto 0); -- anodos
         seg    : out STD_LOGIC_VECTOR(6 downto 0); -- 7 segmentos
         dp     : out STD_LOGIC   -- punto decimal

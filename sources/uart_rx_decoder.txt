@@ -5,7 +5,7 @@ use IEEE.NUMERIC_STD.ALL;
 entity uart_rx_decoder is
     Port (
         clk      : in  STD_LOGIC; -- 100 MHz
-        rx_pin   : in  STD_LOGIC; -- pin RX
+        rx_pin   : in  STD_LOGIC; -- pin RX - modificar en Master
         bcd_adc  : out STD_LOGIC_VECTOR(15 downto 0); -- bus datos adc
         bcd_in   : out STD_LOGIC_VECTOR(15 downto 0)  -- bus datos in
     );
